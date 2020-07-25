@@ -4,10 +4,30 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 )
+
+//WebhookEvent represents a webhook event
+type WebhookEvent struct {
+	ID          string           `json:"id"`
+	Body        json.RawMessage  `json:"body"`
+	ReferenceID string           `json:"reference_id"`
+	EventType   WebhookEventType `json:"event_type"`
+	DateCreated time.Time        `json:"date_created"`
+	Object      string           `json:"object"`
+}
+
+//WebhookEventType represents the event type data for an event
+type WebhookEventType struct {
+	ID             string `json:"id"`
+	EnabledForTest bool   `json:"enabled_for_test"`
+	Resource       string `json:"resource"`
+	Object         string `json:"object"`
+}
 
 // Errors returned by the webbook parsing
 var (
@@ -18,9 +38,24 @@ var (
 	ErrTooOld           = errors.New("timestamp wasn't within tolerance")
 )
 
+//ConstructWebhookEvent constructs a new webhook event and enforces the header signature
+func ConstructWebhookEvent(payload []byte, timestampHeader, signatureHeader, secret string, tolerance time.Duration) (WebhookEvent, error) {
+	e := WebhookEvent{}
+
+	if err := ValidateWebhookPayload(payload, timestampHeader, signatureHeader, secret, tolerance); err != nil {
+		return e, err
+	}
+
+	if err := json.Unmarshal(payload, &e); err != nil {
+		return e, fmt.Errorf("Failed to parse the webhook event body json: %s", err.Error())
+	}
+
+	return e, nil
+}
+
 //ValidateWebhookPayload valides the passed in payload and signature header
-func ValidateWebhookPayload(payload []byte, timestampHeader, sigHeader, secret string, tolerance time.Duration) error {
-	if sigHeader == "" {
+func ValidateWebhookPayload(payload []byte, timestampHeader, signatureHeader, secret string, tolerance time.Duration) error {
+	if signatureHeader == "" {
 		return ErrNotSigned
 	}
 
@@ -28,7 +63,7 @@ func ValidateWebhookPayload(payload []byte, timestampHeader, sigHeader, secret s
 		return err
 	}
 
-	sig, err := hex.DecodeString(sigHeader)
+	sig, err := hex.DecodeString(signatureHeader)
 	if err != nil {
 		return ErrInvalidHeader
 	}
