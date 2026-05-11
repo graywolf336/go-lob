@@ -24,11 +24,12 @@ import (
 func logStackTrace(err error) {
 	buf := make([]byte, 0, 16384)
 	n := runtime.Stack(buf, false)
-	attrs := []any{slog.String("stack", string(buf[:n]))}
+	stack := slog.String("stack", string(buf[:n]))
 	if err != nil {
-		attrs = append(attrs, slog.Any("error", err))
+		slog.ErrorContext(context.TODO(), "lob client error", slog.Any("error", err), stack)
+		return
 	}
-	slog.ErrorContext(context.TODO(), "lob client error", attrs...)
+	slog.ErrorContext(context.TODO(), "lob client error", stack)
 }
 
 type Lob interface {
