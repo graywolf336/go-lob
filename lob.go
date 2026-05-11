@@ -2,10 +2,12 @@ package lob
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -13,21 +15,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/op/go-logging"
 )
 
-var log = logging.MustGetLogger("lob")
-
-// LogStackTrace logs a stack trace for the given error.
+// logStackTrace logs a stack trace for the given error via the default slog
+// logger. Callers do not pass a context.Context, so context.TODO is used; if
+// you need request-scoped attributes (trace IDs, etc.), configure them on the
+// slog handler installed via slog.SetDefault.
 func logStackTrace(err error) {
 	buf := make([]byte, 0, 16384)
 	n := runtime.Stack(buf, false)
+	attrs := []any{slog.String("stack", string(buf[:n]))}
 	if err != nil {
-		log.Errorf("Non-nil error %s; stack trace %s", err.Error(), buf[:n])
-	} else {
-		log.Errorf("Nil error; stack trace %s", buf[:n])
+		attrs = append(attrs, slog.Any("error", err))
 	}
+	slog.ErrorContext(context.TODO(), "lob client error", attrs...)
 }
 
 type Lob interface {
@@ -172,7 +173,7 @@ func json2form(v interface{}) map[string]string {
 // Get performs a GET request to the lob API.
 func (l *lob) get(endpoint string, params map[string]string, returnValue interface{}) error {
 	fullURL := l.BaseAPI + endpoint + queryParams(params)
-	log.Debugf("Lob GET %s", fullURL)
+	slog.DebugContext(context.TODO(), "Lob GET", slog.String("url", fullURL))
 	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
 		logStackTrace(err)
@@ -210,7 +211,7 @@ func (l *lob) get(endpoint string, params map[string]string, returnValue interfa
 // Post performs a POST request to the Lob API.
 func (l *lob) post(endpoint string, params map[string]string, returnValue interface{}) error {
 	fullURL := l.BaseAPI + endpoint
-	log.Debugf("Lob POST %s", fullURL)
+	slog.DebugContext(context.TODO(), "Lob POST", slog.String("url", fullURL))
 
 	var body io.Reader
 	if params != nil {
@@ -263,7 +264,7 @@ func (l *lob) post(endpoint string, params map[string]string, returnValue interf
 // Delete performs a DELETE request to the Lob API.
 func (l *lob) delete(endpoint string, returnValue interface{}) error {
 	fullURL := l.BaseAPI + endpoint
-	log.Debugf("Lob DELETE %s", fullURL)
+	slog.DebugContext(context.TODO(), "Lob DELETE", slog.String("url", fullURL))
 
 	req, err := http.NewRequest("DELETE", fullURL, nil)
 	if err != nil {
